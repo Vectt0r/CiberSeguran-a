@@ -146,3 +146,15 @@ Integração com ferramentas como Shodan	Buscar IPs abertos com base em fingerpr
 
 ==================================================
 ==================================================
+
+
+
+
+
+----> Para detectar SO de forma mais precisa, você precisaria de técnicas como:
+
+fingerprinting ativo (TTL, TCP window size, etc.)
+
+banners SNMP ou SMB
+
+análise de certificados, headers, etc.
