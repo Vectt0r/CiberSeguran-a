@@ -1,0 +1,6 @@
+[22] aberta - scanme.nmap.org (SSH)
+Banner: SSH-2.0-OpenSSH_6.6.1p1 Ubuntu-2ubuntu2.13
+
+Alerta: 
+Sistema: Linux Ubuntu
+

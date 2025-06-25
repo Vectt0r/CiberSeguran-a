@@ -1,0 +1,96 @@
+Resumo do Funcionamento do Programa
+O programa é um scanner de portas TCP multithread desenvolvido em C para Windows, que detecta:
+
+Se a porta está aberta ou fechada
+
+O serviço mais provável baseado na porta
+
+O banner retornado (se disponível)
+
+Informações de certificados SSL/TLS (quando aplicável)
+
+Possíveis vulnerabilidades conhecidas
+
+Sistema operacional identificado por fingerprinting
+
+E gera como saída os arquivos:
+
+saida.txt: resultado formatado por linha
+
+saida.csv: para análise em Excel
+
+saida.json: para uso em ferramentas de visualização ou APIs
+
+ Principais Etapas do Programa
+1. Inicializações
+Inicializa o Winsock (rede no Windows)
+
+Inicializa a OpenSSL (usada para pegar informações TLS/SSL)
+
+Cria arquivos de saída (txt, csv, json)
+
+Inicializa a seção crítica para escrita thread-safe nos arquivos
+
+2. Entrada de Dados
+Recebe por linha de comando:
+
+php-template
+Copiar
+Editar
+scanner.exe <host> <porta_inicial> [porta_final]
+Exemplo:
+
+Copiar
+Editar
+scanner.exe scanme.nmap.org 20 100
+3. Multithreading
+Para cada porta entre a inicial e final:
+
+Cria uma thread separada (scan_port)
+
+Cada thread realiza o teste de conexão e coleta de dados
+
+4. Verificação de Porta
+Dentro da scan_port:
+
+Resolve o hostname
+
+Tenta abrir um socket TCP
+
+Se conseguir conectar, define a porta como aberta
+
+Se falhar, define como fechada
+
+Se a porta for 80 ou 8080, tenta pegar o banner via HEAD /
+
+Se for uma porta SSL (443, 8443, 993), faz handshake SSL/TLS e coleta:
+
+Protocolo (ex: TLS 1.3)
+
+Common Name (CN)
+
+Issuer (emissor do certificado)
+
+Validade (from → to)
+
+5. Análise Adicional
+O banner é analisado para:
+
+Vulnerabilidades conhecidas (ex: Apache/2.2)
+
+Sistema operacional provável (ex: Microsoft → Windows Server)
+
+6. Gravação dos Resultados
+Cada resultado (um por porta) é salvo nos arquivos txt, csv e json
+
+O uso de EnterCriticalSection() garante que múltiplas threads não gravem ao mesmo tempo
+
+7. Finalização
+Aguarda todas as threads terminarem
+
+Remove a última vírgula do JSON (para manter formato válido)
+
+Fecha os arquivos
+
+Limpa o ambiente (Winsock, OpenSSL, memória)
+

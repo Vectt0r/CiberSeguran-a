@@ -1,0 +1,334 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <winsock2.h>
+#include <windows.h>
+
+#include <openssl/bio.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/x509.h>
+#include <openssl/x509v3.h>
+
+#pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "libssl.lib")
+#pragma comment(lib, "libcrypto.lib")
+
+#define TIMEOUT_SEC 2
+#define MAX_PORTS 65535
+
+FILE *txtFile, *jsonFile, *csvFile;
+CRITICAL_SECTION cs;
+
+const char* get_service_name(int port) {
+    switch (port) {
+        case 21: return "FTP";
+        case 22: return "SSH";
+        case 23: return "Telnet";
+        case 25: return "SMTP";
+        case 53: return "DNS";
+        case 80: return "HTTP";
+        case 110: return "POP3";
+        case 143: return "IMAP";
+        case 443: return "HTTPS";
+        case 993: return "IMAPS";
+        case 8443: return "HTTPS-alt";
+        case 3306: return "MySQL";
+        case 3389: return "RDP";
+        default: return "Desconhecido";
+    }
+}
+
+const char* detect_vulnerability(const char* banner) {
+    if (strstr(banner, "Apache/2.2")) return "Apache 2.2 possivelmente desatualizado";
+    if (strstr(banner, "OpenSSH_5")) return "OpenSSH 5 possivelmente vulnerável";
+    if (strstr(banner, "Microsoft-IIS/6")) return "IIS 6 possui falhas conhecidas";
+    return "";
+}
+
+const char* fingerprint_os(const char* banner) {
+    if (strstr(banner, "Ubuntu")) return "Linux Ubuntu";
+    if (strstr(banner, "CentOS")) return "Linux CentOS";
+    if (strstr(banner, "Microsoft")) return "Windows Server";
+    return "Indefinido";
+}
+
+typedef struct {
+    char hostname[256];
+    int port;
+} ScanArgs;
+
+void write_results(const char *host, int port, const char *status, const char *service, const char *banner, const char *alerta, const char *os) {
+    EnterCriticalSection(&cs);
+    fprintf(txtFile, "[%d] %s - %s (%s)\nBanner: %s\nAlerta: %s\nSistema: %s\n\n", port, status, host, service, banner, alerta, os);
+    fprintf(csvFile, "%s,%d,%s,%s,\"%s\",\"%s\",%s\n", host, port, status, service, banner, alerta, os);
+    fprintf(jsonFile,
+        "  {\n"
+        "    \"host\": \"%s\",\n"
+        "    \"port\": %d,\n"
+        "    \"status\": \"%s\",\n"
+        "    \"service\": \"%s\",\n"
+        "    \"banner\": \"%s\",\n"
+        "    \"alert\": \"%s\",\n"
+        "    \"os\": \"%s\"\n"
+        "  },\n",
+        host, port, status, service, banner, alerta, os);
+    LeaveCriticalSection(&cs);
+}
+
+int coletar_ssl_info(const char *host, int port, char *out_banner, size_t max_len) {
+    SSL_CTX *ctx = NULL;
+    SSL *ssl = NULL;
+    BIO *bio = NULL;
+    X509 *cert = NULL;
+    char buffer[2048] = {0};
+
+    ctx = SSL_CTX_new(TLS_client_method());
+    if (!ctx) {
+        snprintf(out_banner, max_len, "(Erro ao criar contexto SSL)");
+        return 1;
+    }
+
+    char port_str[6];
+    snprintf(port_str, sizeof(port_str), "%d", port);
+
+    bio = BIO_new_ssl_connect(ctx);
+    if (!bio) {
+        snprintf(out_banner, max_len, "(Erro ao criar BIO SSL)");
+        SSL_CTX_free(ctx);
+        return 1;
+    }
+
+    BIO_get_ssl(bio, &ssl);
+    if (!ssl) {
+        snprintf(out_banner, max_len, "(Erro ao obter SSL)");
+        BIO_free_all(bio);
+        SSL_CTX_free(ctx);
+        return 1;
+    }
+
+    SSL_set_mode(ssl, SSL_MODE_AUTO_RETRY);
+
+    BIO_set_conn_hostname(bio, host);
+    BIO_set_conn_port(bio, port_str);
+
+    if (BIO_do_connect(bio) <= 0) {
+        snprintf(out_banner, max_len, "(Falha ao conectar SSL/TLS)");
+        BIO_free_all(bio);
+        SSL_CTX_free(ctx);
+        return 1;
+    }
+
+    if (BIO_do_handshake(bio) <= 0) {
+        snprintf(out_banner, max_len, "(Falha no handshake SSL/TLS)");
+        BIO_free_all(bio);
+        SSL_CTX_free(ctx);
+        return 1;
+    }
+
+    cert = SSL_get_peer_certificate(ssl);
+    if (!cert) {
+        snprintf(out_banner, max_len, "(Sem certificado SSL)");
+        BIO_free_all(bio);
+        SSL_CTX_free(ctx);
+        return 1;
+    }
+
+    const char *proto = SSL_get_version(ssl);
+
+    X509_NAME *subj = X509_get_subject_name(cert);
+    char cn[256] = {0};
+    X509_NAME_get_text_by_NID(subj, NID_commonName, cn, sizeof(cn));
+
+    X509_NAME *issuer = X509_get_issuer_name(cert);
+    char issuer_cn[256] = {0};
+    X509_NAME_get_text_by_NID(issuer, NID_commonName, issuer_cn, sizeof(issuer_cn));
+
+    ASN1_TIME *not_before = X509_get_notBefore(cert);
+    ASN1_TIME *not_after = X509_get_notAfter(cert);
+
+    BIO *bio_time = BIO_new(BIO_s_mem());
+    ASN1_TIME_print(bio_time, not_before);
+    int len = BIO_read(bio_time, buffer, sizeof(buffer)-1);
+    buffer[len] = '\0';
+    char valid_from[128];
+    strncpy(valid_from, buffer, sizeof(valid_from));
+    BIO_free(bio_time);
+
+    bio_time = BIO_new(BIO_s_mem());
+    ASN1_TIME_print(bio_time, not_after);
+    len = BIO_read(bio_time, buffer, sizeof(buffer)-1);
+    buffer[len] = '\0';
+    char valid_to[128];
+    strncpy(valid_to, buffer, sizeof(valid_to));
+    BIO_free(bio_time);
+
+    snprintf(out_banner, max_len,
+        "Protocolo: %s\nCN: %s\nIssuer: %s\nValidade: %s até %s",
+        proto ? proto : "(desconhecido)",
+        cn[0] ? cn : "(não detectado)",
+        issuer_cn[0] ? issuer_cn : "(não detectado)",
+        valid_from[0] ? valid_from : "(não detectado)",
+        valid_to[0] ? valid_to : "(não detectado)"
+    );
+
+    X509_free(cert);
+    BIO_free_all(bio);
+    SSL_CTX_free(ctx);
+
+    return 0;
+}
+
+DWORD WINAPI scan_port(LPVOID args) {
+    ScanArgs *scan = (ScanArgs *)args;
+    int sock;
+    struct sockaddr_in server;
+    struct hostent *host;
+    fd_set readfds;
+    struct timeval timeout;
+    char banner[2048] = {0};
+    const char *status, *alerta, *os, *service;
+
+    host = gethostbyname(scan->hostname);
+    if (host == NULL) {
+        write_results(scan->hostname, scan->port, "erro", "Desconhecido", "", "Erro ao resolver hostname", "");
+        return 1;
+    }
+
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock == INVALID_SOCKET) {
+        write_results(scan->hostname, scan->port, "erro", "Desconhecido", "", "Erro ao criar socket", "");
+        return 1;
+    }
+
+    server.sin_family = AF_INET;
+    server.sin_port = htons(scan->port);
+    server.sin_addr = *((struct in_addr *)host->h_addr);
+    memset(&(server.sin_zero), 0, 8);
+
+    if (connect(sock, (struct sockaddr *)&server, sizeof(server)) < 0) {
+        closesocket(sock);
+        write_results(scan->hostname, scan->port, "fechada", get_service_name(scan->port), "", "", "");
+        return 0;
+    }
+
+    if (scan->port == 80 || scan->port == 8080) {
+        const char *req = "HEAD / HTTP/1.0\r\n\r\n";
+        send(sock, req, (int)strlen(req), 0);
+    }
+
+    FD_ZERO(&readfds);
+    FD_SET(sock, &readfds);
+    timeout.tv_sec = TIMEOUT_SEC;
+    timeout.tv_usec = 0;
+
+    if (select(0, &readfds, NULL, NULL, &timeout) > 0) {
+        int rcv_len = recv(sock, banner, sizeof(banner) - 1, 0);
+        if (rcv_len > 0) banner[rcv_len] = '\0';
+    }
+
+    closesocket(sock);
+
+    status = "aberta";
+    service = get_service_name(scan->port);
+    alerta = detect_vulnerability(banner);
+    os = fingerprint_os(banner);
+
+    if (scan->port == 443 || scan->port == 8443 || scan->port == 993) {
+        char ssl_info[2048] = {0};
+        if (coletar_ssl_info(scan->hostname, scan->port, ssl_info, sizeof(ssl_info)) == 0) {
+            strncpy(banner, ssl_info, sizeof(banner) - 1);
+            alerta = ""; 
+            os = "SSL/TLS";
+        }
+    }
+
+    write_results(scan->hostname, scan->port, status, service, banner[0] ? banner : "(sem resposta)", alerta, os);
+    return 0;
+}
+
+int main(int argc, char *argv[]) {
+    WSADATA wsa;
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+        printf("Falha ao iniciar Winsock.\n");
+        return 1;
+    }
+
+    SSL_library_init();
+    SSL_load_error_strings();
+    OpenSSL_add_all_algorithms();
+    OPENSSL_init_ssl(0, NULL);
+
+    InitializeCriticalSection(&cs);
+
+    if (argc < 3) {
+        printf("Uso: %s <host> <porta_inicial> [porta_final]\n", argv[0]);
+        return 1;
+    }
+
+    const char *hostname = argv[1];
+    int port_start = atoi(argv[2]);
+    int port_end = (argc > 3) ? atoi(argv[3]) : port_start;
+
+    if (port_start > port_end || port_start < 1 || port_end > MAX_PORTS) {
+        printf("Portas inválidas. Use intervalo entre 1 e %d.\n", MAX_PORTS);
+        return 1;
+    }
+
+    txtFile = fopen("saida.txt", "w");
+    jsonFile = fopen("saida.json", "w");
+    csvFile = fopen("saida.csv", "w");
+
+    if (!txtFile || !jsonFile || !csvFile) {
+        printf("Erro ao abrir arquivos de saída.\n");
+        return 1;
+    }
+
+    fprintf(jsonFile, "[\n");
+    fprintf(csvFile, "host,port,status,service,banner,alert,os\n");
+
+    HANDLE threads[MAX_PORTS];
+    ScanArgs *args[MAX_PORTS];
+    int t = 0;
+    int wrote_json_entry = 0;
+
+    for (int port = port_start; port <= port_end; port++) {
+        args[t] = (ScanArgs *)malloc(sizeof(ScanArgs));
+        if (!args[t]) {
+            printf("Erro de memória.\n");
+            break;
+        }
+        strncpy(args[t]->hostname, hostname, sizeof(args[t]->hostname));
+        args[t]->hostname[sizeof(args[t]->hostname)-1] = '\0';
+        args[t]->port = port;
+
+        threads[t] = CreateThread(NULL, 0, scan_port, args[t], 0, NULL);
+        if (threads[t] == NULL) {
+            printf("Erro ao criar thread para porta %d\n", port);
+            free(args[t]);
+            break;
+        }
+        t++;
+        Sleep(10);
+    }
+
+    WaitForMultipleObjects(t, threads, TRUE, INFINITE);
+
+    // Ajustar JSON: remover vírgula da última entrada
+    fseek(jsonFile, -2, SEEK_END);
+    fprintf(jsonFile, "\n]\n");
+
+    for (int i = 0; i < t; i++) {
+        CloseHandle(threads[i]);
+        free(args[i]);
+    }
+
+    fclose(txtFile);
+    fclose(jsonFile);
+    fclose(csvFile);
+    DeleteCriticalSection(&cs);
+    WSACleanup();
+
+    printf("\nScan finalizado. Resultados em saida.txt, saida.json e saida.csv\n");
+    return 0;
+}
