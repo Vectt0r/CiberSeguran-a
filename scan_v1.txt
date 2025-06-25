@@ -48,47 +48,9 @@ const char* detect_vulnerability(const char* banner) {
 
 const char* fingerprint_os(const char* banner) {
     if (strstr(banner, "Ubuntu")) return "Linux Ubuntu";
-    if (strstr(banner, "Debian")) return "Linux Debian";
     if (strstr(banner, "CentOS")) return "Linux CentOS";
-    if (strstr(banner, "Red Hat") || strstr(banner, "RHEL")) return "Linux Red Hat";
-    if (strstr(banner, "Alpine")) return "Linux Alpine";
-    if (strstr(banner, "FreeBSD")) return "FreeBSD";
-    if (strstr(banner, "OpenBSD")) return "OpenBSD";
-    if (strstr(banner, "Arch")) return "Arch Linux";
-
-    if (strstr(banner, "Microsoft") || strstr(banner, "Windows")) return "Windows Server";
-    if (strstr(banner, "IIS/")) return "Windows Server (IIS)";
-    if (strstr(banner, "Win32")) return "Windows (Win32)";
-    
-    if (strstr(banner, "Darwin")) return "macOS";
-    if (strstr(banner, "macOS")) return "macOS";
-
-    if (strstr(banner, "Apache") && strstr(banner, "Debian")) return "Linux Debian (Apache)";
-    if (strstr(banner, "Apache") && strstr(banner, "Ubuntu")) return "Linux Ubuntu (Apache)";
-
+    if (strstr(banner, "Microsoft")) return "Windows Server";
     return "Indefinido";
-}
-
-
-const char* check_http_security_headers(const char* banner, int port) {
-    int has_xcto = (strstr(banner, "X-Content-Type-Options: nosniff") != NULL);
-    int has_xfo = (strstr(banner, "X-Frame-Options: DENY") != NULL) || (strstr(banner, "X-Frame-Options: SAMEORIGIN") != NULL);
-    int has_csp = (strstr(banner, "Content-Security-Policy:") != NULL);
-    int has_hsts = (strstr(banner, "Strict-Transport-Security:") != NULL);
-
-    // Para HTTP padrão (porta 80 e 8080), Strict-Transport-Security não é obrigatório
-    if (port == 80 || port == 8080) has_hsts = 1;
-
-    static char alert[512];
-    alert[0] = '\0';
-
-    if (!has_xcto) strcat(alert, "X-Content-Type-Options ausente ou incorreto; ");
-    if (!has_xfo) strcat(alert, "X-Frame-Options ausente ou incorreto; ");
-    if (!has_csp) strcat(alert, "Content-Security-Policy ausente; ");
-    if (!has_hsts) strcat(alert, "Strict-Transport-Security ausente; ");
-
-    if (alert[0] == '\0') return ""; // nenhum alerta
-    else return alert;
 }
 
 typedef struct {
@@ -147,9 +109,8 @@ int coletar_ssl_info(const char *host, int port, char *out_banner, size_t max_le
 
     SSL_set_mode(ssl, SSL_MODE_AUTO_RETRY);
 
-    char target[512];
-    snprintf(target, sizeof(target), "%s:%s", host, port_str);
-    BIO_set_conn_hostname(bio, target);
+    BIO_set_conn_hostname(bio, host);
+    BIO_set_conn_port(bio, port_str);
 
     if (BIO_do_connect(bio) <= 0) {
         snprintf(out_banner, max_len, "(Falha ao conectar SSL/TLS)");
@@ -188,7 +149,7 @@ int coletar_ssl_info(const char *host, int port, char *out_banner, size_t max_le
 
     BIO *bio_time = BIO_new(BIO_s_mem());
     ASN1_TIME_print(bio_time, not_before);
-    int len = BIO_read(bio_time, buffer, sizeof(buffer) - 1);
+    int len = BIO_read(bio_time, buffer, sizeof(buffer)-1);
     buffer[len] = '\0';
     char valid_from[128];
     strncpy(valid_from, buffer, sizeof(valid_from));
@@ -196,7 +157,7 @@ int coletar_ssl_info(const char *host, int port, char *out_banner, size_t max_le
 
     bio_time = BIO_new(BIO_s_mem());
     ASN1_TIME_print(bio_time, not_after);
-    len = BIO_read(bio_time, buffer, sizeof(buffer) - 1);
+    len = BIO_read(bio_time, buffer, sizeof(buffer)-1);
     buffer[len] = '\0';
     char valid_to[128];
     strncpy(valid_to, buffer, sizeof(valid_to));
@@ -251,69 +212,38 @@ DWORD WINAPI scan_port(LPVOID args) {
         return 0;
     }
 
+    if (scan->port == 80 || scan->port == 8080) {
+        const char *req = "HEAD / HTTP/1.0\r\n\r\n";
+        send(sock, req, (int)strlen(req), 0);
+    }
+
+    FD_ZERO(&readfds);
+    FD_SET(sock, &readfds);
+    timeout.tv_sec = TIMEOUT_SEC;
+    timeout.tv_usec = 0;
+
+    if (select(0, &readfds, NULL, NULL, &timeout) > 0) {
+        int rcv_len = recv(sock, banner, sizeof(banner) - 1, 0);
+        if (rcv_len > 0) banner[rcv_len] = '\0';
+    }
+
+    closesocket(sock);
+
     status = "aberta";
     service = get_service_name(scan->port);
-    alerta = "";
-    os = "Indefinido";
+    alerta = detect_vulnerability(banner);
+    os = fingerprint_os(banner);
 
     if (scan->port == 443 || scan->port == 8443 || scan->port == 993) {
         char ssl_info[2048] = {0};
         if (coletar_ssl_info(scan->hostname, scan->port, ssl_info, sizeof(ssl_info)) == 0) {
             strncpy(banner, ssl_info, sizeof(banner) - 1);
-            alerta = "";
-            os = "SSL/TLS";
-        } else {
-            strncpy(banner, "(Erro ao coletar info SSL)", sizeof(banner) - 1);
-            alerta = "Erro no handshake SSL/TLS";
+            alerta = ""; 
             os = "SSL/TLS";
         }
-    } else if (scan->port == 80 || scan->port == 8080) {
-        const char *req = "HEAD / HTTP/1.0\r\n\r\n";
-        send(sock, req, (int)strlen(req), 0);
-
-        FD_ZERO(&readfds);
-        FD_SET(sock, &readfds);
-        timeout.tv_sec = TIMEOUT_SEC;
-        timeout.tv_usec = 0;
-
-        if (select(0, &readfds, NULL, NULL, &timeout) > 0) {
-            int rcv_len = recv(sock, banner, sizeof(banner) - 1, 0);
-            if (rcv_len > 0) banner[rcv_len] = '\0';
-        } else {
-            strncpy(banner, "(sem resposta)", sizeof(banner) - 1);
-        }
-
-        os = fingerprint_os(banner);
-        alerta = detect_vulnerability(banner);
-        const char *alerta_headers = check_http_security_headers(banner, scan->port);
-
-        static char alerta_final[1024];
-        alerta_final[0] = '\0';
-
-        if (alerta && alerta[0]) strcat(alerta_final, alerta);
-        if (alerta_headers && alerta_headers[0]) strcat(alerta_final, alerta_headers);
-        alerta = alerta_final;
-    } else {
-        FD_ZERO(&readfds);
-        FD_SET(sock, &readfds);
-        timeout.tv_sec = TIMEOUT_SEC;
-        timeout.tv_usec = 0;
-
-        if (select(0, &readfds, NULL, NULL, &timeout) > 0) {
-            int rcv_len = recv(sock, banner, sizeof(banner) - 1, 0);
-            if (rcv_len > 0) banner[rcv_len] = '\0';
-        } else {
-            strncpy(banner, "(sem resposta)", sizeof(banner) - 1);
-        }
-
-        alerta = detect_vulnerability(banner);
-        os = fingerprint_os(banner);
     }
 
-    closesocket(sock);
-
-    write_results(scan->hostname, scan->port, status, service, banner, alerta, os);
-
+    write_results(scan->hostname, scan->port, status, service, banner[0] ? banner : "(sem resposta)", alerta, os);
     return 0;
 }
 
@@ -360,6 +290,7 @@ int main(int argc, char *argv[]) {
     HANDLE threads[MAX_PORTS];
     ScanArgs *args[MAX_PORTS];
     int t = 0;
+    int wrote_json_entry = 0;
 
     for (int port = port_start; port <= port_end; port++) {
         args[t] = (ScanArgs *)malloc(sizeof(ScanArgs));

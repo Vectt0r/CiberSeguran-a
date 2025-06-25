@@ -1,0 +1,17 @@
+Lista de portas:
+Porta 80: Utilizada para HTTP (conexões não criptografadas). 
+Porta 443: Utilizada para HTTPS (conexões seguras e criptografadas). 
+Porta 8080: Uma porta alternativa para HTTP, frequentemente usada em desenvolvimento ou quando a porta 80 está ocupada. 
+Outras portas relevantes:
+Porta 21: FTP (File Transfer Protocol).
+Porta 22: SSH (Secure Shell).
+Porta 25: SMTP (Simple Mail Transfer Protocol).
+Porta 53: DNS (Domain Name System).
+Porta 110: POP3 (Post Office Protocol versão 3).
+Porta 143: IMAP (Internet Message Access Protocol).
+Porta 3389: RDP (Remote Desktop Protocol). 
+Observações:
+As portas TCP e UDP são identificadas por números de 0 a 65535. 
+As portas 0 a 1023 são conhecidas como portas "bem conhecidas" e geralmente são atribuídas a serviços padrão. 
+As portas de 1024 a 49151 são registradas para uso por aplicações e serviços específicos. 
+As portas de 49152 a 65535 são usadas dinamicamente por sistemas operacionais para conexões de cliente. 

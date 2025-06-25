@@ -48,27 +48,10 @@ const char* detect_vulnerability(const char* banner) {
 
 const char* fingerprint_os(const char* banner) {
     if (strstr(banner, "Ubuntu")) return "Linux Ubuntu";
-    if (strstr(banner, "Debian")) return "Linux Debian";
     if (strstr(banner, "CentOS")) return "Linux CentOS";
-    if (strstr(banner, "Red Hat") || strstr(banner, "RHEL")) return "Linux Red Hat";
-    if (strstr(banner, "Alpine")) return "Linux Alpine";
-    if (strstr(banner, "FreeBSD")) return "FreeBSD";
-    if (strstr(banner, "OpenBSD")) return "OpenBSD";
-    if (strstr(banner, "Arch")) return "Arch Linux";
-
-    if (strstr(banner, "Microsoft") || strstr(banner, "Windows")) return "Windows Server";
-    if (strstr(banner, "IIS/")) return "Windows Server (IIS)";
-    if (strstr(banner, "Win32")) return "Windows (Win32)";
-    
-    if (strstr(banner, "Darwin")) return "macOS";
-    if (strstr(banner, "macOS")) return "macOS";
-
-    if (strstr(banner, "Apache") && strstr(banner, "Debian")) return "Linux Debian (Apache)";
-    if (strstr(banner, "Apache") && strstr(banner, "Ubuntu")) return "Linux Ubuntu (Apache)";
-
+    if (strstr(banner, "Microsoft")) return "Windows Server";
     return "Indefinido";
 }
-
 
 const char* check_http_security_headers(const char* banner, int port) {
     int has_xcto = (strstr(banner, "X-Content-Type-Options: nosniff") != NULL);
