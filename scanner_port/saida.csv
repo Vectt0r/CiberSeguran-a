@@ -1,3 +1,5 @@
 host,port,status,service,banner,alert,os
-scanme.nmap.org,22,aberta,SSH,"SSH-2.0-OpenSSH_6.6.1p1 Ubuntu-2ubuntu2.13
-","",Linux Ubuntu
+netcomet.com.br,443,aberta,HTTPS,"Protocolo: TLSv1.3
+CN: agrovarzea.com.br
+Issuer: R11
+Validade: Jun 14 04:38:54 2025 GMT até Sep 12 04:38:53 2025 GMT","",SSL/TLS

@@ -1,6 +1,8 @@
-[22] aberta - scanme.nmap.org (SSH)
-Banner: SSH-2.0-OpenSSH_6.6.1p1 Ubuntu-2ubuntu2.13
-
+[443] aberta - netcomet.com.br (HTTPS)
+Banner: Protocolo: TLSv1.3
+CN: agrovarzea.com.br
+Issuer: R11
+Validade: Jun 14 04:38:54 2025 GMT até Sep 12 04:38:53 2025 GMT
 Alerta: 
-Sistema: Linux Ubuntu
+Sistema: SSL/TLS
 
