@@ -1,8 +1,29 @@
-[443] aberta - netcomet.com.br (HTTPS)
-Banner: Protocolo: TLSv1.3
-CN: agrovarzea.com.br
-Issuer: R11
-Validade: Jun 14 04:38:54 2025 GMT até Sep 12 04:38:53 2025 GMT
+[80] aberta - netcomet.com.br (HTTP)
+Banner: HTTP/1.1 301 Moved Permanently
+Date: Thu, 26 Jun 2025 17:16:00 GMT
+Server: Apache/2.4.38 (Debian)
+Location: https:///
+Connection: close
+Content-Type: text/html; charset=iso-8859-1
+
+
+Alerta: X-Content-Type-Options ausente ou incorreto; X-Frame-Options ausente ou incorreto; Content-Security-Policy ausente; 
+Sistema: Linux Debian
+
+[110] aberta - netcomet.com.br (POP3)
+Banner: +OK Dovecot (Debian) ready.
+
 Alerta: 
-Sistema: SSL/TLS
+Sistema: Linux Debian
+
+[143] aberta - netcomet.com.br (IMAP)
+Banner: * OK [CAPABILITY IMAP4rev1 SASL-IR LOGIN-REFERRALS ID ENABLE IDLE LITERAL+ STARTTLS AUTH=PLAIN AUTH=LOGIN] Dovecot (Debian) ready.
+
+Alerta: 
+Sistema: Linux Debian
+
+[111] aberta - netcomet.com.br (Desconhecido)
+Banner: (sem resposta)
+Alerta: 
+Sistema: Indefinido
 

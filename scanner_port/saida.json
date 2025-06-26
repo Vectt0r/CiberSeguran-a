@@ -1,14 +1,47 @@
 [
   {
     "host": "netcomet.com.br",
-    "port": 443,
+    "port": 80,
     "status": "aberta",
-    "service": "HTTPS",
-    "banner": "Protocolo: TLSv1.3
-CN: agrovarzea.com.br
-Issuer: R11
-Validade: Jun 14 04:38:54 2025 GMT até Sep 12 04:38:53 2025 GMT",
+    "service": "HTTP",
+    "banner": "HTTP/1.1 301 Moved Permanently
+Date: Thu, 26 Jun 2025 17:16:00 GMT
+Server: Apache/2.4.38 (Debian)
+Location: https:///
+Connection: close
+Content-Type: text/html; charset=iso-8859-1
+
+",
+    "alert": "X-Content-Type-Options ausente ou incorreto; X-Frame-Options ausente ou incorreto; Content-Security-Policy ausente; ",
+    "os": "Linux Debian"
+  },
+  {
+    "host": "netcomet.com.br",
+    "port": 110,
+    "status": "aberta",
+    "service": "POP3",
+    "banner": "+OK Dovecot (Debian) ready.
+",
     "alert": "",
-    "os": "SSL/TLS"
+    "os": "Linux Debian"
+  },
+  {
+    "host": "netcomet.com.br",
+    "port": 143,
+    "status": "aberta",
+    "service": "IMAP",
+    "banner": "* OK [CAPABILITY IMAP4rev1 SASL-IR LOGIN-REFERRALS ID ENABLE IDLE LITERAL+ STARTTLS AUTH=PLAIN AUTH=LOGIN] Dovecot (Debian) ready.
+",
+    "alert": "",
+    "os": "Linux Debian"
+  },
+  {
+    "host": "netcomet.com.br",
+    "port": 111,
+    "status": "aberta",
+    "service": "Desconhecido",
+    "banner": "(sem resposta)",
+    "alert": "",
+    "os": "Indefinido"
   },
 ]

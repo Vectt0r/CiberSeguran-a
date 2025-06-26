@@ -17,7 +17,7 @@
 #define TIMEOUT_SEC 2
 #define MAX_PORTS 65535
 
-FILE *txtFile, *jsonFile, *csvFile;
+FILE *txtFile, *jsonFile;
 CRITICAL_SECTION cs;
 
 const char* get_service_name(int port) {
@@ -99,7 +99,6 @@ typedef struct {
 void write_results(const char *host, int port, const char *status, const char *service, const char *banner, const char *alerta, const char *os) {
     EnterCriticalSection(&cs);
     fprintf(txtFile, "[%d] %s - %s (%s)\nBanner: %s\nAlerta: %s\nSistema: %s\n\n", port, status, host, service, banner, alerta, os);
-    fprintf(csvFile, "%s,%d,%s,%s,\"%s\",\"%s\",%s\n", host, port, status, service, banner, alerta, os);
     fprintf(jsonFile,
         "  {\n"
         "    \"host\": \"%s\",\n"
@@ -347,15 +346,13 @@ int main(int argc, char *argv[]) {
 
     txtFile = fopen("saida.txt", "w");
     jsonFile = fopen("saida.json", "w");
-    csvFile = fopen("saida.csv", "w");
 
-    if (!txtFile || !jsonFile || !csvFile) {
+    if (!txtFile || !jsonFile) {
         printf("Erro ao abrir arquivos de saída.\n");
         return 1;
     }
 
     fprintf(jsonFile, "[\n");
-    fprintf(csvFile, "host,port,status,service,banner,alert,os\n");
 
     HANDLE threads[MAX_PORTS];
     ScanArgs *args[MAX_PORTS];
@@ -394,7 +391,6 @@ int main(int argc, char *argv[]) {
 
     fclose(txtFile);
     fclose(jsonFile);
-    fclose(csvFile);
     DeleteCriticalSection(&cs);
     WSACleanup();
 
